@@ -1,14 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/app.py": {
+    "app.py": {
       "excludeFiles": "{tests/**,__tests__/**,**/*.test.py,**/test_*.py,.pytest_cache/**,__pycache__/**,**/__pycache__/**,data/uploads/**,*.ipynb,**/*.ipynb}"
     }
   },
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "/api/app"
+      "destination": "/app"
     }
   ],
   "cleanUrls": true
