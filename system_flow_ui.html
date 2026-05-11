@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post-Op Triage & RAG Support</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1e40af;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --border: #e2e8f0;
+            --text: #0f172a;
+            --muted: #64748b;
+            --success: #16a34a;
+            --warning: #ca8a04;
+            --orange: #ea580c;
+            --danger: #dc2626;
+            --critical: #991b1b;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+        main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+            display: grid;
+            gap: 20px;
+        }
+        h1, h2, h3, h4 {
+            margin: 0 0 10px;
+        }
+        p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 20px;
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.04);
+        }
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(0, 2fr) minmax(340px, 1fr);
+            gap: 20px;
+            align-items: start;
+        }
+        .left-column, .right-column {
+            display: grid;
+            gap: 20px;
+        }
+        .right-column {
+            position: sticky;
+            top: 20px;
+        }
+        .zone-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .zone-number {
+            width: 32px;
+            height: 32px;
+            border-radius: 999px;
+            background: #dbeafe;
+            color: var(--primary-dark);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+        .zone-help {
+            margin-bottom: 14px;
+        }
+        .subgrid {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        }
+        .mini-card {
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 14px;
+            background: #fbfdff;
+        }
+        label {
+            display: block;
+            margin: 12px 0 6px;
+            font-weight: 700;
+        }
+        input, textarea, select, button {
+            width: 100%;
+            font: inherit;
+            border-radius: 10px;
+            border: 1px solid #cbd5e1;
+            padding: 10px 12px;
+        }
+        textarea {
+            min-height: 84px;
+            resize: vertical;
+        }
+        button {
+            margin-top: 14px;
+            border: none;
+            background: var(--primary);
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        button:hover {
+            background: var(--primary-dark);
+        }
+        button.secondary {
+            background: white;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+        }
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        .alert {
+            display: none;
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-size: 14px;
+        }
+        .alert.show { display: block; }
+        .alert.success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #86efac;
+        }
+        .alert.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+        .inline-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .inline-actions button {
+            width: auto;
+            margin-top: 0;
+            min-width: 150px;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            color: white;
+            font-weight: 700;
+        }
+        .badge.low { background: var(--success); }
+        .badge.moderate { background: var(--warning); }
+        .badge.high { background: var(--orange); }
+        .badge.critical { background: var(--critical); }
+        .panel {
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 14px;
+            background: #f8fbff;
+        }
+        .meta-grid {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            margin: 12px 0;
+        }
+        .meta-item {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 12px;
+            background: white;
+        }
+        .meta-item small {
+            display: block;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+        .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .chip {
+            background: #dbeafe;
+            color: var(--primary-dark);
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 13px;
+        }
+        .list-clean {
+            margin: 8px 0 0 18px;
+            padding: 0;
+        }
+        .queue-list {
+            display: grid;
+            gap: 10px;
+        }
+        .queue-item {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            background: white;
+        }
+        .queue-item button {
+            margin-top: 10px;
+        }
+        .result-block {
+            display: grid;
+            gap: 12px;
+        }
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: Consolas, monospace;
+            font-size: 13px;
+            color: #1e293b;
+        }
+        @media (max-width: 1024px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+            .right-column {
+                position: static;
+            }
+        }
+        @media (max-width: 720px) {
+            main {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <section class="card">
+            <h1>Post-Op Triage &amp; RAG Support</h1>
+            <p>AI-assisted triage, doctor review, and document-grounded recovery support.</p>
+        </section>
+
+        <div id="global-alert" class="alert"></div>
+
+        <section class="layout">
+            <div class="left-column">
+                <section class="card">
+                    <div class="zone-title">
+                        <span class="zone-number">1</span>
+                        <h2>Patient Intake</h2>
+                    </div>
+                    <p class="zone-help">Submit a new post-operative patient update here. Use this when a patient sends new symptoms or a fresh recovery update.</p>
+                    <form id="patient-form">
+                        <label for="patient-id">Patient ID</label>
+                        <input id="patient-id" required>
+                        <label for="patient-age">Age</label>
+                        <input id="patient-age" type="number" min="0" placeholder="Optional">
+                        <label for="patient-protocol">Surgery / Procedure / Protocol</label>
+                        <textarea id="patient-protocol" required></textarea>
+                        <label for="patient-symptoms">Symptoms</label>
+                        <textarea id="patient-symptoms"></textarea>
+                        <label for="patient-medications">Medications</label>
+                        <textarea id="patient-medications"></textarea>
+                        <button type="submit" id="patient-submit-btn">Submit patient update</button>
+                    </form>
+                </section>
+
+                <section class="card">
+                    <div class="zone-title">
+                        <span class="zone-number">2</span>
+                        <h2>Doctor Review</h2>
+                    </div>
+                    <p class="zone-help">Moderate and High cases wait here. Critical cases are escalated immediately and should not wait in this queue.</p>
+                    <div id="doctor-queue" class="queue-list panel">
+                        <p>No pending doctor reviews.</p>
+                    </div>
+                    <form id="doctor-form" style="margin-top: 14px;">
+                        <label for="doctor-patient-id">Patient ID</label>
+                        <input id="doctor-patient-id" required>
+                        <label for="doctor-risk-preview">Current Risk Level</label>
+                        <input id="doctor-risk-preview" disabled placeholder="Select a pending case or enter patient ID">
+                        <label for="doctor-instructions">Doctor Instructions</label>
+                        <textarea id="doctor-instructions"></textarea>
+                        <label for="doctor-risk-override">Risk Override</label>
+                        <select id="doctor-risk-override">
+                            <option value="">No override</option>
+                            <option>Low</option>
+                            <option>Moderate</option>
+                            <option>High</option>
+                            <option>Critical</option>
+                        </select>
+                        <button type="submit" id="doctor-submit-btn">Send doctor review</button>
+                    </form>
+                </section>
+
+                <section class="card">
+                    <div class="zone-title">
+                        <span class="zone-number">3</span>
+                        <h2>Patient Follow-Up</h2>
+                    </div>
+                    <p class="zone-help">Use this after a plan was already delivered. Submit new symptoms, a patient question, or a request to modify the current plan.</p>
+                    <form id="followup-form">
+                        <label for="followup-patient-id">Patient ID</label>
+                        <input id="followup-patient-id">
+                        <label for="followup-symptoms">New Symptoms</label>
+                        <textarea id="followup-symptoms"></textarea>
+                        <label for="followup-question">Patient Question</label>
+                        <textarea id="followup-question"></textarea>
+                        <label for="followup-note">Plan Modification Note</label>
+                        <textarea id="followup-note"></textarea>
+                        <button type="submit" id="followup-submit-btn">Submit follow-up</button>
+                    </form>
+                </section>
+
+                <section class="card">
+                    <div class="zone-title">
+                        <span class="zone-number">4</span>
+                        <h2>Knowledge Base</h2>
+                    </div>
+                    <p class="zone-help">Uploaded protocols are used to support triage decisions and answer doctor or patient questions with document-grounded support.</p>
+
+                    <div class="subgrid">
+                        <div class="mini-card">
+                            <h3>A. Upload Protocol File</h3>
+                            <p>Upload PDF, TXT, or MD documents with extractable text.</p>
+                            <form id="upload-form">
+                                <label for="upload-file">Protocol file</label>
+                                <input id="upload-file" type="file" accept=".pdf,.txt,.md" required>
+                                <button type="submit" id="upload-btn">Upload file</button>
+                            </form>
+                        </div>
+
+                        <div class="mini-card">
+                            <h3>B. Ingest Manual Text</h3>
+                            <p>Add short protocol notes or guidance manually.</p>
+                            <form id="ingest-form">
+                                <label for="ingest-source">Source</label>
+                                <input id="ingest-source" placeholder="manual-protocol">
+                                <label for="ingest-text">Text</label>
+                                <textarea id="ingest-text"></textarea>
+                                <button type="submit" id="ingest-btn">Ingest text</button>
+                            </form>
+                        </div>
+
+                        <div class="mini-card">
+                            <h3>C. Search Knowledge</h3>
+                            <p>Search indexed chunks across uploaded and built-in guidance.</p>
+                            <form id="search-form">
+                                <label for="search-query">Query</label>
+                                <input id="search-query" placeholder="fever after surgery">
+                                <button type="submit" id="search-btn">Search knowledge</button>
+                            </form>
+                        </div>
+
+                        <div class="mini-card">
+                            <h3>D. Ask Documents</h3>
+                            <p>Ask a grounded question using the uploaded knowledge base only.</p>
+                            <form id="answer-form">
+                                <label for="answer-query">Question</label>
+                                <textarea id="answer-query" placeholder="What should a knee replacement patient avoid?"></textarea>
+                                <label for="answer-audience">Audience</label>
+                                <select id="answer-audience">
+                                    <option value="patient">patient</option>
+                                    <option value="doctor">doctor</option>
+                                </select>
+                                <button type="submit" id="answer-btn">Ask documents</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="mini-card" style="margin-top: 14px;">
+                        <div class="inline-actions">
+                            <div>
+                                <h3>E. Documents</h3>
+                                <p>Refresh the current document inventory used by the RAG layer.</p>
+                            </div>
+                            <button type="button" class="secondary" id="documents-refresh-btn">Refresh documents</button>
+                        </div>
+                        <div id="documents-panel" class="panel" style="margin-top: 14px;">
+                            <p>No documents loaded yet.</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="right-column">
+                <section class="card">
+                    <h2>Latest Result</h2>
+                    <p>The latest triage result, knowledge search, or grounded answer appears here.</p>
+                    <div id="result-panel" class="panel" style="margin-top: 14px;">
+                        <p>No result yet.</p>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <div class="inline-actions">
+                        <div>
+                            <h2>System State</h2>
+                            <p>Use this to monitor pending cases, RAG mode, and storage activity.</p>
+                        </div>
+                        <button type="button" class="secondary" id="state-refresh-btn">Refresh state</button>
+                    </div>
+                    <div id="state-panel" class="panel" style="margin-top: 14px;">
+                        <p>Loading state...</p>
+                    </div>
+                </section>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const appState = {
+            pendingCases: [],
+            latestState: null,
+            documents: null
+        };
+
+        const statusLabels = {
+            plan_delivered: "Plan delivered to patient",
+            doctor_review_required: "Doctor review required",
+            emergency_escalation: "Emergency escalation",
+            updated_after_patient_feedback: "Updated after patient feedback",
+            error: "Error"
+        };
+
+        const nextActionLabels = {
+            doctor_review: "Doctor should review this case",
+            emergency_care: "Patient should seek emergency care",
+            patient_follow_up: "Patient should follow the plan and update progress",
+            continue_current_plan: "Continue current recovery plan",
+            upload_knowledge: "Upload knowledge if protocol support is needed",
+            no_action_required: "No action required"
+        };
+
+        function setLoading(button, state) {
+            if (!button.dataset.originalText) {
+                button.dataset.originalText = button.textContent;
+            }
+            button.disabled = state;
+            button.textContent = state ? "Loading..." : button.dataset.originalText;
+        }
+
+        function showError(message) {
+            const node = document.getElementById("global-alert");
+            node.textContent = message || "Something went wrong.";
+            node.className = "alert show error";
+        }
+
+        function showSuccess(message) {
+            const node = document.getElementById("global-alert");
+            node.textContent = message || "Completed successfully.";
+            node.className = "alert show success";
+        }
+
+        function renderRiskBadge(risk) {
+            const label = risk || "Unknown";
+            const klass = (risk || "low").toLowerCase();
+            return `<span class="badge ${klass}">${label}</span>`;
+        }
+
+        function renderPlan(plan) {
+            const steps = (plan?.steps || []).map(step => `<li>${step.instruction}</li>`).join("");
+            return steps ? `<ol class="list-clean">${steps}</ol>` : "<p>No recovery plan available.</p>";
+        }
+
+        function renderSources(sources) {
+            if (!sources || !sources.length) {
+                return "<p>No sources available.</p>";
+            }
+            return sources.map(source => `
+                <div class="mini-card">
+                    <strong>${source.source || "unknown"}</strong>
+                    <div class="meta-grid">
+                        <div class="meta-item"><small>Score</small><strong>${source.score ?? "-"}</strong></div>
+                    </div>
+                    <pre>${source.content_preview || source.content || ""}</pre>
+                </div>
+            `).join("");
+        }
+
+        function renderRagResults(results) {
+            if (!results || !results.length) {
+                return "<p>No retrieved chunks.</p>";
+            }
+            return results.map(item => `
+                <div class="mini-card">
+                    <strong>${item.source || "unknown"}</strong>
+                    <div class="meta-grid">
+                        <div class="meta-item"><small>Score</small><strong>${item.score ?? "-"}</strong></div>
+                        <div class="meta-item"><small>Doc Type</small><strong>${item.doc_type || "-"}</strong></div>
+                    </div>
+                    <pre>${item.content || ""}</pre>
+                </div>
+            `).join("");
+        }
+
+        function renderAnswer(answer) {
+            return `
+                <div class="result-block">
+                    <div class="meta-grid">
+                        <div class="meta-item"><small>Audience</small><strong>${answer.audience || "-"}</strong></div>
+                        <div class="meta-item"><small>Mode</small><strong>${answer.mode || "-"}</strong></div>
+                    </div>
+                    <div class="mini-card">
+                        <strong>Document-grounded answer</strong>
+                        <pre>${answer.answer || "-"}</pre>
+                    </div>
+                    <div class="mini-card">
+                        <strong>Sources</strong>
+                        ${renderSources(answer.sources)}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderResult(data) {
+            const panel = document.getElementById("result-panel");
+            if (!data) {
+                panel.innerHTML = "<p>No result yet.</p>";
+                return;
+            }
+            if (data.status === "error") {
+                panel.innerHTML = `<div class="mini-card"><strong>Error</strong><pre>${data.message || "Unknown error."}</pre></div>`;
+                return;
+            }
+            if (data.answer && data.sources) {
+                panel.innerHTML = renderAnswer(data);
+                return;
+            }
+            if (data.results) {
+                panel.innerHTML = `
+                    <div class="result-block">
+                        <div class="meta-grid">
+                            <div class="meta-item"><small>Mode</small><strong>${data.mode || "-"}</strong></div>
+                            <div class="meta-item"><small>Query</small><strong>${data.query || "-"}</strong></div>
+                        </div>
+                        ${renderRagResults(data.results)}
+                    </div>
+                `;
+                return;
+            }
+            const statusText = statusLabels[data.status] || data.status || "-";
+            const nextActionText = nextActionLabels[data.next_action] || data.next_action || "-";
+            panel.innerHTML = `
+                <div class="result-block">
+                    <div>${renderRiskBadge(data.risk_level)}</div>
+                    <div class="meta-grid">
+                        <div class="meta-item"><small>Status</small><strong>${statusText}</strong></div>
+                        <div class="meta-item"><small>Next Action</small><strong>${nextActionText}</strong></div>
+                        <div class="meta-item"><small>Patient ID</small><strong>${data.patient_id || "-"}</strong></div>
+                        <div class="meta-item"><small>Doctor Review Required</small><strong>${data.doctor_review_required ? "Yes" : "No"}</strong></div>
+                    </div>
+                    <div class="mini-card">
+                        <strong>Patient Message</strong>
+                        <pre>${data.patient_message || "-"}</pre>
+                    </div>
+                    <div class="mini-card">
+                        <strong>Recovery Plan</strong>
+                        ${renderPlan(data.recovery_plan)}
+                    </div>
+                    <div class="mini-card">
+                        <strong>Reasoning</strong>
+                        <pre>${data.reasoning || data.risk_reason || "-"}</pre>
+                    </div>
+                    <div class="mini-card">
+                        <strong>Retrieved Context Summary</strong>
+                        <pre>${data.retrieved_context_summary || "-"}</pre>
+                    </div>
+                    <div class="mini-card">
+                        <strong>RAG Sources</strong>
+                        ${renderSources(data.sources)}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderDoctorQueue() {
+            const queue = document.getElementById("doctor-queue");
+            if (!appState.pendingCases.length) {
+                queue.innerHTML = "<p>No pending doctor reviews.</p>";
+                return;
+            }
+            queue.innerHTML = appState.pendingCases.map(item => `
+                <div class="queue-item">
+                    <div class="inline-actions" style="justify-content:space-between;">
+                        <strong>${item.patient_id}</strong>
+                        ${renderRiskBadge(item.risk_level)}
+                    </div>
+                    <p><strong>Symptoms:</strong> ${item.symptoms || "-"}</p>
+                    <p><strong>Reason:</strong> ${item.reasoning || "-"}</p>
+                    <p><strong>RAG context:</strong> ${item.retrieved_context_summary || "-"}</p>
+                    <p><strong>Top source:</strong> ${item.sources?.[0]?.source || "-"}</p>
+                    <button type="button" class="secondary" onclick="selectPendingCase('${item.patient_id}')">Load into doctor review</button>
+                </div>
+            `).join("");
+        }
+
+        function renderSystemState(state) {
+            const panel = document.getElementById("state-panel");
+            if (!state || state.status === "error") {
+                panel.innerHTML = `<p>${state?.message || "Unable to load system state."}</p>`;
+                return;
+            }
+            const pending = (state.pending_patient_ids || []).map(id => `<span class="chip">${id}</span>`).join("");
+            const last = (state.last_decision_patient_ids || []).map(id => `<span class="chip">${id}</span>`).join("");
+            const mentor = Object.entries(state.mentor_states || {}).map(([id, step]) => `<li>${id}: step ${step}</li>`).join("");
+            const docs = (state.documents || []).map(doc => `<li>${doc.source} | chunks: ${doc.chunks} | type: ${doc.doc_type || "-"}</li>`).join("");
+            panel.innerHTML = `
+                <div class="result-block">
+                    <div class="mini-card">
+                        <strong>Pending Patients</strong>
+                        <div class="chips">${pending || "<span class='chip'>None</span>"}</div>
+                    </div>
+                    <div class="mini-card">
+                        <strong>Last Decisions</strong>
+                        <div class="chips">${last || "<span class='chip'>None</span>"}</div>
+                    </div>
+                    <div class="mini-card">
+                        <strong>Mentor States</strong>
+                        <ul class="list-clean">${mentor || "<li>None</li>"}</ul>
+                    </div>
+                    <div class="mini-card">
+                        <strong>RAG Health</strong>
+                        <pre>${JSON.stringify({
+                            mode: state.rag_health?.mode,
+                            total_chunks: state.rag_health?.total_chunks,
+                            documents: state.rag_health?.documents,
+                            last_error: state.rag_health?.last_error,
+                            vector_available: state.rag_health?.vector_available
+                        }, null, 2)}</pre>
+                    </div>
+                    <div class="mini-card">
+                        <strong>Storage Summary</strong>
+                        <pre>${JSON.stringify(state.storage_summary || {}, null, 2)}</pre>
+                    </div>
+                    <div class="mini-card">
+                        <strong>Documents</strong>
+                        <ul class="list-clean">${docs || "<li>No RAG documents listed.</li>"}</ul>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderDocuments(data) {
+            const panel = document.getElementById("documents-panel");
+            if (!data || data.status === "error") {
+                panel.innerHTML = `<p>${data?.message || "Unable to load documents."}</p>`;
+                return;
+            }
+            const ragDocs = (data.rag_documents || []).map(doc => `
+                <li>${doc.source} | chunks: ${doc.chunks} | type: ${doc.doc_type || "-"}${doc.path ? ` | ${doc.path}` : ""}${doc.created_at ? ` | ${doc.created_at}` : ""}</li>
+            `).join("");
+            const storedDocs = (data.stored_documents || []).map(doc => `
+                <li>${doc.source}${doc.path ? ` | ${doc.path}` : ""}${doc.created_at ? ` | ${doc.created_at}` : ""}</li>
+            `).join("");
+            panel.innerHTML = `
+                <div class="result-block">
+                    <div class="mini-card">
+                        <strong>RAG Documents</strong>
+                        <ul class="list-clean">${ragDocs || "<li>No indexed documents.</li>"}</ul>
+                    </div>
+                    <div class="mini-card">
+                        <strong>Stored Document Records</strong>
+                        <ul class="list-clean">${storedDocs || "<li>No stored documents.</li>"}</ul>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function submitPatient(event) {
+            event.preventDefault();
+            const button = document.getElementById("patient-submit-btn");
+            setLoading(button, true);
+            try {
+                const patientId = document.getElementById("patient-id").value.trim();
+                const age = document.getElementById("patient-age").value.trim();
+                const payload = {
+                    patient_info: {
+                        patient_id: patientId,
+                        age: age ? Number(age) : null
+                    },
+                    surgery_protocol: document.getElementById("patient-protocol").value.trim(),
+                    symptoms: document.getElementById("patient-symptoms").value.trim(),
+                    medications: document.getElementById("patient-medications").value.trim()
+                };
+                const response = await fetch("/api/patient/submit", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                renderResult(data);
+                if (data.status === "error") {
+                    showError(data.message || "Patient submit failed.");
+                } else {
+                    document.getElementById("doctor-patient-id").value = patientId;
+                    document.getElementById("followup-patient-id").value = patientId;
+                    showSuccess(statusLabels[data.status] || "Patient update submitted.");
+                    await refreshState();
+                }
+            } catch (error) {
+                showError(error.message || "Patient submit failed.");
+            } finally {
+                setLoading(button, false);
+            }
+        }
+
+        async function sendDoctorFeedback(event) {
+            event.preventDefault();
+            const button = document.getElementById("doctor-submit-btn");
+            setLoading(button, true);
+            try {
+                const payload = {
+                    patient_id: document.getElementById("doctor-patient-id").value.trim(),
+                    instructions: document.getElementById("doctor-instructions").value.trim() || null,
+                    risk_override: document.getElementById("doctor-risk-override").value || null
+                };
+                const response = await fetch("/api/doctor/feedback", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                renderResult(data);
+                if (data.status === "error") {
+                    showError(data.message || "Doctor feedback failed.");
+                } else {
+                    showSuccess("Doctor review submitted.");
+                    await refreshState();
+                }
+            } catch (error) {
+                showError(error.message || "Doctor feedback failed.");
+            } finally {
+                setLoading(button, false);
+            }
+        }
+
+        async function sendPatientFeedback(event) {
+            event.preventDefault();
+            const button = document.getElementById("followup-submit-btn");
+            setLoading(button, true);
+            try {
+                const question = document.getElementById("followup-question").value.trim();
+                const payload = {
+                    patient_id: document.getElementById("followup-patient-id").value.trim() || null,
+                    new_symptoms: document.getElementById("followup-symptoms").value.trim() || null,
+                    questions: question ? [question] : [],
+                    notes_for_modification: document.getElementById("followup-note").value.trim() || null
+                };
+                const response = await fetch("/api/patient/feedback", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                renderResult(data);
+                if (data.status === "error") {
+                    showError(data.message || "Patient follow-up failed.");
+                } else {
+                    showSuccess(statusLabels[data.status] || "Patient follow-up submitted.");
+                    await refreshState();
+                }
+            } catch (error) {
+                showError(error.message || "Patient follow-up failed.");
+            } finally {
+                setLoading(button, false);
+            }
+        }
+
+        async function ingestText(event) {
+            event.preventDefault();
+            const button = document.getElementById("ingest-btn");
+            setLoading(button, true);
+            try {
+                const payload = {
+                    source: document.getElementById("ingest-source").value.trim() || "manual",
+                    text: document.getElementById("ingest-text").value.trim()
+                };
+                const response = await fetch("/api/rag/ingest", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                renderResult({
+                    answer: data.message || `Indexed ${data.chunks_added || 0} chunks.`,
+                    audience: "doctor",
+                    mode: data.mode,
+                    sources: []
+                });
+                if (data.status === "error") {
+                    showError(data.message || "Text ingest failed.");
+                } else {
+                    showSuccess(data.message || `Text ingested. Chunks added: ${data.chunks_added || 0}`);
+                    await refreshDocuments();
+                    await refreshState();
+                }
+            } catch (error) {
+                showError(error.message || "Text ingest failed.");
+            } finally {
+                setLoading(button, false);
+            }
+        }
+
+        async function uploadFile(event) {
+            event.preventDefault();
+            const button = document.getElementById("upload-btn");
+            setLoading(button, true);
+            try {
+                const file = document.getElementById("upload-file").files[0];
+                const formData = new FormData();
+                formData.append("file", file);
+                const response = await fetch("/api/rag/upload", { method: "POST", body: formData });
+                const data = await response.json();
+                renderResult({
+                    answer: data.message || `Upload processed with ${data.chunks_added || 0} chunks.`,
+                    audience: "doctor",
+                    mode: data.mode,
+                    sources: []
+                });
+                if (!response.ok || data.status === "error" || data.detail) {
+                    showError(data.message || data.detail || "File upload failed.");
+                } else {
+                    showSuccess(data.message || `File uploaded. Chunks added: ${data.chunks_added || 0}`);
+                    await refreshDocuments();
+                    await refreshState();
+                }
+            } catch (error) {
+                showError(error.message || "File upload failed.");
+            } finally {
+                setLoading(button, false);
+            }
+        }
+
+        async function searchKnowledge(event) {
+            event.preventDefault();
+            const button = document.getElementById("search-btn");
+            setLoading(button, true);
+            try {
+                const query = encodeURIComponent(document.getElementById("search-query").value.trim());
+                const response = await fetch(`/api/rag/search?q=${query}`);
+                const data = await response.json();
+                renderResult(data);
+                if (data.status === "error") {
+                    showError(data.message || "Knowledge search failed.");
+                } else {
+                    showSuccess("Knowledge search completed.");
+                }
+            } catch (error) {
+                showError(error.message || "Knowledge search failed.");
+            } finally {
+                setLoading(button, false);
+            }
+        }
+
+        async function askKnowledge(event) {
+            event.preventDefault();
+            const button = document.getElementById("answer-btn");
+            setLoading(button, true);
+            try {
+                const payload = {
+                    query: document.getElementById("answer-query").value.trim(),
+                    audience: document.getElementById("answer-audience").value
+                };
+                const response = await fetch("/api/rag/answer", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                renderResult(data);
+                if (data.status === "error") {
+                    showError(data.message || "Grounded answer failed.");
+                } else {
+                    showSuccess("Document-grounded answer generated.");
+                }
+            } catch (error) {
+                showError(error.message || "Grounded answer failed.");
+            } finally {
+                setLoading(button, false);
+            }
+        }
+
+        async function refreshState() {
+            const response = await fetch("/api/system/state");
+            const data = await response.json();
+            appState.latestState = data;
+            appState.pendingCases = data.pending_case_summaries || [];
+            renderDoctorQueue();
+            renderSystemState(data);
+        }
+
+        async function refreshDocuments() {
+            const response = await fetch("/api/rag/documents");
+            const data = await response.json();
+            appState.documents = data;
+            renderDocuments(data);
+        }
+
+        function selectPendingCase(patientId) {
+            const item = appState.pendingCases.find(entry => entry.patient_id === patientId);
+            document.getElementById("doctor-patient-id").value = patientId;
+            document.getElementById("followup-patient-id").value = patientId;
+            document.getElementById("doctor-risk-preview").value = item?.risk_level || "";
+            if (item) {
+                renderResult({
+                    status: "doctor_review_required",
+                    next_action: "doctor_review",
+                    patient_id: item.patient_id,
+                    risk_level: item.risk_level,
+                    doctor_review_required: true,
+                    patient_message: "Doctor review is required before final instructions can be delivered.",
+                    recovery_plan: item.recovery_plan,
+                    reasoning: item.reasoning,
+                    retrieved_context_summary: item.retrieved_context_summary,
+                    sources: item.sources,
+                });
+            }
+        }
+
+        document.getElementById("patient-form").addEventListener("submit", submitPatient);
+        document.getElementById("doctor-form").addEventListener("submit", sendDoctorFeedback);
+        document.getElementById("followup-form").addEventListener("submit", sendPatientFeedback);
+        document.getElementById("ingest-form").addEventListener("submit", ingestText);
+        document.getElementById("upload-form").addEventListener("submit", uploadFile);
+        document.getElementById("search-form").addEventListener("submit", searchKnowledge);
+        document.getElementById("answer-form").addEventListener("submit", askKnowledge);
+        document.getElementById("state-refresh-btn").addEventListener("click", refreshState);
+        document.getElementById("documents-refresh-btn").addEventListener("click", refreshDocuments);
+
+        refreshState();
+        refreshDocuments();
+    </script>
+</body>
+</html>

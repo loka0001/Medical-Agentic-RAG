@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+python-multipart
+pydantic
+python-dotenv
+langchain
+langchain-openai
+langchain-community
+langchain-text-splitters
+faiss-cpu
+pypdf
+sentence-transformers
+scikit-learn
+langgraph
+pytest
+httpx
