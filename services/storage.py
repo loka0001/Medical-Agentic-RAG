@@ -1,5 +1,7 @@
 import json
+import os
 import sqlite3
+import tempfile
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -8,13 +10,14 @@ from pydantic import BaseModel
 
 
 class Storage:
-    def __init__(self, db_path="data/app.sqlite3"):
-        self.db_path = Path(db_path)
+    def __init__(self, db_path=None):
+        self.db_path = Path(db_path) if db_path else self._default_db_path()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             self._init_db()
         except sqlite3.OperationalError:
-            self.db_path = self.db_path.with_name("app_live.sqlite3")
+            fallback_dir = Path(tempfile.gettempdir()) if os.getenv("VERCEL") else self.db_path.parent
+            self.db_path = fallback_dir / "app_live.sqlite3"
             if self.db_path.exists() and self.db_path.stat().st_size == 0:
                 self.db_path.unlink()
             self._init_db()
@@ -78,11 +81,19 @@ class Storage:
 
     def state_summary(self):
         return {
+            "db_path": str(self.db_path),
             "cases": self._count("cases"),
             "decisions": self._count("decisions"),
             "feedback": self._count("feedback"),
             "documents": self._count("documents"),
         }
+
+    def _default_db_path(self):
+        if os.getenv("SQLITE_DB_PATH"):
+            return Path(os.getenv("SQLITE_DB_PATH"))
+        if os.getenv("VERCEL"):
+            return Path(tempfile.gettempdir()) / "app.sqlite3"
+        return Path("data/app.sqlite3")
 
     def _init_db(self):
         self._execute(
